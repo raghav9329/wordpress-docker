@@ -5,5 +5,5 @@ Resources:
       Properties:
         TaskDefinition: arn:aws:ecs:us-east-1:298901429832:task-definition/wordpress:5
         LoadBalancerInfo:
-          ContainerName: wordpress
+          ContainerName: wordpress-fargate
           ContainerPort: 80
