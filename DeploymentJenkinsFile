@@ -1,36 +1,71 @@
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        TF_VAR_region = 'us-east-1'
-        TF_VAR_account_id = "298901429832"
-        TF_VAR_instance_class= "db.t3.micro"
-        TF_VAR_app_image = "wordpress"
+  environment {
+    AWS_REGION = 'us-east-1'
+    ECS_CLUSTER = 'wordpress-cluster'
+    ECS_SERVICE = 'wordpress-service'
+    IMAGE_REPO_NAME = 'wordpress'
+    IMAGE_TAG = 'latest'
+    AWS_ACCOUNT_ID = ''
+  }
+
+  stages {
+    stage('Build Docker image') {
+      steps {
+        script {
+          docker.build("${IMAGE_REPO_NAME}:${IMAGE_TAG}")
+        }
+      }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url: 'https://github.com/raghav9329/wordpress-fargate.git']]])
-            }
+    stage('Push Docker image to ECR') {
+      steps {
+        script {
+          // withCredentials([[
+          //   credentialsId: 'aws-ecr-creds',
+          //   accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+          //   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+          // ]])
+           {
+            sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+            dockerImagePush("${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}")
+          }
         }
-
-        stage('Install Terraform plugins') {
-            steps {
-                sh 'terraform init'
-            }
-        }
-
-        stage('Plan infrastructure changes') {
-            steps {
-                sh 'terraform plan -target=module.fargate_dev -out=tfplan '
-            }
-        }
-        stage('Apply infrastructure changes') {
-            steps {
-                sh 'terraform apply -auto-approve tfplan'
-            }
-        }
-
+      }
     }
+
+    stage('Deploy to Fargate') {
+      steps {
+        script {
+          // withCredentials([[
+          //   credentialsId: 'aws-codedeploy-creds',
+          //   accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+          //   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+          // ]])
+           {
+            def deployApp = "wp-codedeploy-app"
+            def deployGroup = "wp-codedeploy-group"
+            def deployment = [:]
+            deployment.applicationName = deployApp
+            deployment.deploymentGroupName = deployGroup
+            deployment.revision = [:]
+            deployment.revision.revisionType = 'ECSService'
+            deployment.revision.ecsService = [:]
+            deployment.revision.ecsService.serviceName = "${ECS_SERVICE}"
+            deployment.revision.ecsService.clusterName = "${ECS_CLUSTER}"
+            deployment.revision.ecsService.imageUri = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
+            def deployID = awsCodeDeploy(deployment)
+            timeout(time: 15, unit: 'MINUTES') {
+              def deployStatus = ''
+              while(deployStatus != 'Succeeded') {
+                sleep(time: 30, unit: 'SECONDS')
+                deployStatus = awsCodeDeployDeploymentStatus(deployID)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
