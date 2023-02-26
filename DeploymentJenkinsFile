@@ -7,14 +7,19 @@ pipeline {
     ECS_SERVICE = 'wordpress-service'
     IMAGE_REPO_NAME = 'wordpress'
     IMAGE_TAG = 'latest'
-    AWS_ACCOUNT_ID = ''
+    AWS_ACCOUNT_ID = '298901429832'
   }
 
   stages {
+            stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url: 'https://github.com/raghav9329/wordpress-docker.git']]])
+            }
+        }
     stage('Build Docker image') {
       steps {
         script {
-          docker.build("${IMAGE_REPO_NAME}:${IMAGE_TAG}")
+             docker.build("${IMAGE_REPO_NAME}:${IMAGE_TAG}")
         }
       }
     }
@@ -22,49 +27,22 @@ pipeline {
     stage('Push Docker image to ECR') {
       steps {
         script {
-          // withCredentials([[
-          //   credentialsId: 'aws-ecr-creds',
-          //   accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-          //   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-          // ]])
-           {
             sh "aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-            dockerImagePush("${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}")
-          }
+            sh 'docker tag "${IMAGE_REPO_NAME}:${IMAGE_TAG}" "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"'
+            sh 'docker push "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"'
+            //wordpress.push("${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}")
         }
       }
     }
 
     stage('Deploy to Fargate') {
       steps {
-        script {
-          // withCredentials([[
-          //   credentialsId: 'aws-codedeploy-creds',
-          //   accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-          //   secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-          // ]])
-           {
-            def deployApp = "wp-codedeploy-app"
-            def deployGroup = "wp-codedeploy-group"
-            def deployment = [:]
-            deployment.applicationName = deployApp
-            deployment.deploymentGroupName = deployGroup
-            deployment.revision = [:]
-            deployment.revision.revisionType = 'ECSService'
-            deployment.revision.ecsService = [:]
-            deployment.revision.ecsService.serviceName = "${ECS_SERVICE}"
-            deployment.revision.ecsService.clusterName = "${ECS_CLUSTER}"
-            deployment.revision.ecsService.imageUri = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
-            def deployID = awsCodeDeploy(deployment)
-            timeout(time: 15, unit: 'MINUTES') {
-              def deployStatus = ''
-              while(deployStatus != 'Succeeded') {
-                sleep(time: 30, unit: 'SECONDS')
-                deployStatus = awsCodeDeployDeploymentStatus(deployID)
-              }
-            }
-          }
-        }
+          sh 'aws s3 cp "appspec.yml" s3://wp-codedeploy-raghav/'
+            sh   'aws deploy create-deployment \
+    --application-name wp-codedeploy-app \
+    --deployment-group-name wp-codedeploy-group \
+    --description "Deployment $VERSION" \
+    --s3-location bucket=wp-codedeploy-raghav,bundleType=YAML,key="appspec.yml"'
       }
     }
   }
