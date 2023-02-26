@@ -1,3 +1,3 @@
 FROM  wordpress:latest
 
-EXPOSE 8080
+EXPOSE 80
