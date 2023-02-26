@@ -22,7 +22,7 @@ pipeline {
             
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t wp-image .'
+                sh 'docker build -t wp-image:latest .'
             }
         }
         
@@ -31,8 +31,8 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable: 'demo', passwordVariable: 'demo123')]) {
                     sh "docker login -u $DOCKER_USER -p $DOCKER_PASS"
                 }
-                  sh "docker tag wp-image:latest demo/wp-image:latest"
-                  sh "docker push demo/wp-image:latest"
+                  sh "docker tag wp-image:latest demo/wp-image:$Version"
+                  sh "docker push demo/wp-image:$Version"
             }
         }
     
