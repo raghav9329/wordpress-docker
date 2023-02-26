@@ -1,0 +1,52 @@
+properties([pipelineTriggers([githubPush()])])
+ 
+pipeline {
+    /* specify nodes for executing */
+    agent any
+ 
+    stages {
+        /* checkout repo */
+        stage('Checkout SCM') {
+            steps {
+                checkout([
+                 $class: 'GitSCM',
+                 branches: [[name: 'main']],
+                 userRemoteConfigs: [[
+                    url: 'https://github.com/raghav9329/wordpress-docker.git',
+                    credentialsId: '',
+                 ]]
+                ])
+            }
+        }
+        
+            
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t wp-image .'
+            }
+        }
+        
+        stage('Push Docker Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable: 'demo', passwordVariable: 'demo123')]) {
+                    sh "docker login -u $DOCKER_USER -p $DOCKER_PASS"
+                }
+                  sh "docker tag wp-image:latest demo/wp-image:latest"
+                  sh "docker push demo/wp-image:latest"
+            }
+        }
+    
+         stage('Do the deployment') {
+            steps {
+                echo ">> Run deploy applications "
+            }
+        }
+    }
+ 
+    /* Cleanup workspace */
+    post {
+       always {
+           deleteDir()
+       }
+   }
+}
