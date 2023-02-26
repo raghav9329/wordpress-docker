@@ -3,7 +3,7 @@ Resources:
   - TargetService:
       Type: AWS::ECS::Service
       Properties:
-        TaskDefinition: arn:aws:ecs:us-east-1:298901429832:task/wordpress-cluster/d33764b86b434b0c873e492001fabcae
+        TaskDefinition: arn:aws:ecs:us-east-1:298901429832:task-definition/wordpress:5
         LoadBalancerInfo:
           ContainerName: wordpress
           ContainerPort: 80
