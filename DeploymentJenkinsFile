@@ -1,0 +1,36 @@
+pipeline {
+    agent any
+
+    environment {
+        TF_VAR_region = 'us-east-1'
+        TF_VAR_account_id = "298901429832"
+        TF_VAR_instance_class= "db.t3.micro"
+        TF_VAR_app_image = "wordpress"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: '', url: 'https://github.com/raghav9329/wordpress-fargate.git']]])
+            }
+        }
+
+        stage('Install Terraform plugins') {
+            steps {
+                sh 'terraform init'
+            }
+        }
+
+        stage('Plan infrastructure changes') {
+            steps {
+                sh 'terraform plan -target=module.fargate_dev -out=tfplan '
+            }
+        }
+        stage('Apply infrastructure changes') {
+            steps {
+                sh 'terraform apply -auto-approve tfplan'
+            }
+        }
+
+    }
+}
